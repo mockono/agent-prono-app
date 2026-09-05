@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --conf-5: #3d8b5f;
+  --conf-4: #6fa84d;
+  --conf-3: #e8a33d;
+  --conf-2: #d97b3d;
+  --conf-1: #c1443c;
+}
+
+html,
+body {
+  background-color: #0f1712;
+  color: #eef2ec;
+}
+
+::selection {
+  background: #4c7a3d;
+  color: #0f1712;
+}
+
+/* Alignement tabulaire pour toutes les données chiffrées (cotes, scores, %) */
+.tab-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
