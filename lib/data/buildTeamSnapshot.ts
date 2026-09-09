@@ -1,5 +1,6 @@
 import type { RecentForm, VenueSplit, AttackDefenseProfile, TeamSnapshot } from "../engine/scoring";
-import type { FDMatch } from "./footballData";
+import type { FDMatch, FDStanding } from "./footballData";
+import { positionOf } from "./deriveContext";
 
 function matchesInvolving(results: FDMatch[], teamId: number): FDMatch[] {
   return results.filter((m) => m.homeTeam.id === teamId || m.awayTeam.id === teamId);
@@ -107,12 +108,16 @@ function computeStreak(matchesDesc: FDMatch[], teamId: number): string | undefin
 export function buildTeamSnapshotFromLeagueResults(
   teamId: number,
   teamName: string,
-  leagueResults: FDMatch[]
+  leagueResults: FDMatch[],
+  standings?: FDStanding[]
 ): TeamSnapshot {
   const involving = matchesInvolving(leagueResults, teamId);
   const sorted = [...involving].sort((a, b) => new Date(b.utcDate).getTime() - new Date(a.utcDate).getTime());
   const last5 = sorted.slice(0, 5);
   const last10 = sorted.slice(0, 10);
+
+  const position = standings ? positionOf(standings, teamId) : undefined;
+  const points = standings?.find((s) => s.team.id === teamId)?.points;
 
   return {
     teamId: String(teamId),
@@ -122,8 +127,8 @@ export function buildTeamSnapshotFromLeagueResults(
     homeStats: computeVenueSplit(sorted, teamId, true),
     awayStats: computeVenueSplit(sorted, teamId, false),
     attackDefense: computeAttackDefense(sorted, teamId),
-    leaguePosition: undefined,
-    leaguePoints: undefined,
+    leaguePosition: position,
+    leaguePoints: points,
     currentStreak: computeStreak(sorted, teamId),
   };
 }
