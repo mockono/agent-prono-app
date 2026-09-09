@@ -1,18 +1,19 @@
 /**
  * Client football-data.org (v4)
  * ================================
- * ⚠️ Jamais testé contre la vraie API dans mon environnement de génération
- * (pas d'accès réseau, pas de clé). Format écrit d'après la documentation
- * publique — si un champ ne correspond pas, dis-moi le JSON brut et je corrige.
+ * ⚠️ Jamais testé contre la vraie API en conditions réelles. Format écrit
+ * d'après la documentation publique — si un champ ne correspond pas,
+ * dis-moi le JSON brut et je corrige.
  *
- * Free tier : 10 requêtes/minute, 12 championnats (dont PL, PD, SA, FL1,
- * BL1, CL utilisés ici). Pas de quota mensuel documenté, juste le débit.
+ * Free tier : 10 requêtes/minute, 12 championnats. Un seul appel par
+ * championnat couvre les 60 derniers jours + les 7 prochains jours, on
+ * sépare ensuite localement upcoming/résultats — ça évite de doubler le
+ * nombre d'appels et garde le temps total sous la limite de Vercel (60s).
  */
 
 const BASE_URL = "https://api.football-data.org/v4";
 const CACHE_SECONDS = 12 * 60 * 60;
-
-const THROTTLE_MS = 6500;
+const THROTTLE_MS = 3000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,32 +43,23 @@ function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function fetchUpcomingMatches(
+/** Un seul appel : renvoie tous les matchs (passés ET à venir) sur la fenêtre demandée. */
+export async function fetchCompetitionWindow(
   competitionCode: string,
   token: string,
+  daysBack = 60,
   daysAhead = 7
 ): Promise<FDMatch[]> {
-  const from = formatDate(new Date());
+  const from = formatDate(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000));
   const to = formatDate(new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000));
-  const json = await footballDataGet(
-    `/competitions/${competitionCode}/matches?dateFrom=${from}&dateTo=${to}&status=SCHEDULED`,
-    token
-  );
+  const json = await footballDataGet(`/competitions/${competitionCode}/matches?dateFrom=${from}&dateTo=${to}`, token);
   await sleep(THROTTLE_MS);
   return json.matches ?? [];
 }
 
-export async function fetchRecentResults(
-  competitionCode: string,
-  token: string,
-  daysBack = 60
-): Promise<FDMatch[]> {
-  const from = formatDate(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000));
-  const to = formatDate(new Date());
-  const json = await footballDataGet(
-    `/competitions/${competitionCode}/matches?dateFrom=${from}&dateTo=${to}&status=FINISHED`,
-    token
-  );
-  await sleep(THROTTLE_MS);
-  return json.matches ?? [];
+export function splitUpcomingAndFinished(matches: FDMatch[]): { upcoming: FDMatch[]; finished: FDMatch[] } {
+  return {
+    upcoming: matches.filter((m) => m.status === "SCHEDULED" || m.status === "TIMED"),
+    finished: matches.filter((m) => m.status === "FINISHED"),
+  };
 }
