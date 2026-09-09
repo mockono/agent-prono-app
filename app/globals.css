@@ -8,6 +8,10 @@
   --conf-3: #e8a33d;
   --conf-2: #d97b3d;
   --conf-1: #c1443c;
+
+  --font-oswald: "Oswald", sans-serif;
+  --font-plex-sans: "IBM Plex Sans", sans-serif;
+  --font-plex-mono: "IBM Plex Mono", monospace;
 }
 
 html,
@@ -16,15 +20,54 @@ body {
   color: #eef2ec;
 }
 
+body {
+  background-image:
+    radial-gradient(1200px 600px at 15% -10%, rgba(76, 122, 61, 0.16), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(232, 163, 61, 0.08), transparent 55%);
+  background-attachment: fixed;
+}
+
 ::selection {
   background: #4c7a3d;
   color: #0f1712;
 }
 
-/* Alignement tabulaire pour toutes les données chiffrées (cotes, scores, %) */
+h1,
+h2,
+h3 {
+  letter-spacing: 0.01em;
+}
+
 .tab-nums {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.45s ease-out both;
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.animate-soft-pulse {
+  animation: soft-pulse 1.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
