@@ -2,7 +2,7 @@ import type { TicketResult } from "@/lib/engine/ticketBuilder";
 
 export function TicketPanel({ ticket }: { ticket: TicketResult }) {
   return (
-    <div className="border border-pitch-line bg-pitch-surface p-4 flex flex-col gap-3">
+    <div className="border border-pitch-line bg-pitch-surface p-4 flex flex-col gap-3 animate-fade-in-up">
       <header className="flex items-center justify-between border-b border-pitch-line pb-3">
         <div>
           <p className="text-[11px] text-white/50 font-body">Ticket</p>
@@ -29,7 +29,11 @@ export function TicketPanel({ ticket }: { ticket: TicketResult }) {
       ) : (
         <ol className="flex flex-col divide-y divide-pitch-line">
           {ticket.selections.map((s, i) => (
-            <li key={s.analysis.match.id} className="py-2.5 flex items-center justify-between gap-3">
+            <li
+              key={s.analysis.match.id}
+              className="py-2.5 flex items-center justify-between gap-3 transition-colors duration-200 hover:bg-white/[0.03] px-1 -mx-1"
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
               <div className="flex items-baseline gap-2 min-w-0">
                 <span className="font-mono tab-nums text-[11px] text-white/40 w-5">{i + 1}</span>
                 <div className="min-w-0">
