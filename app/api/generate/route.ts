@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { MOCK_MATCHES } from "@/lib/data/mockMatches";
+import { getMatches } from "@/lib/data/matchesProvider";
 import { analyzeAllMockMatches } from "@/lib/engine/matchAnalysis";
 import { buildTicket, type Forfait, type ProSubtier } from "@/lib/engine/ticketBuilder";
+
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -9,8 +11,9 @@ export async function POST(req: NextRequest) {
   const proSubtier: ProSubtier | undefined = body.proSubtier;
   const montanteStep: number | undefined = body.montanteStep;
 
-  const analyses = analyzeAllMockMatches(MOCK_MATCHES);
+  const { matches, source } = await getMatches();
+  const analyses = analyzeAllMockMatches(matches);
   const ticket = buildTicket(analyses, forfait, { proSubtier, montanteStep });
 
-  return NextResponse.json({ ticket });
+  return NextResponse.json({ ticket, source });
 }
