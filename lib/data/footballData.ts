@@ -6,9 +6,9 @@
  * dis-moi le JSON brut et je corrige.
  *
  * Free tier : 10 requêtes/minute, 12 championnats. Un seul appel par
- * championnat couvre les 60 derniers jours + les 7 prochains jours, on
- * sépare ensuite localement upcoming/résultats — ça évite de doubler le
- * nombre d'appels et garde le temps total sous la limite de Vercel (60s).
+ * championnat couvre les 60 derniers jours + les 7 prochains jours, plus
+ * un appel classement (standings) par championnat — le tout doit rester
+ * sous la limite de 60s d'exécution de Vercel.
  */
 
 const BASE_URL = "https://api.football-data.org/v4";
@@ -28,6 +28,13 @@ export interface FDMatch {
   score: { fullTime: { home: number | null; away: number | null } };
 }
 
+export interface FDStanding {
+  position: number;
+  team: { id: number; name: string };
+  points: number;
+  playedGames: number;
+}
+
 async function footballDataGet(path: string, token: string): Promise<any> {
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: { "X-Auth-Token": token },
@@ -43,7 +50,6 @@ function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Un seul appel : renvoie tous les matchs (passés ET à venir) sur la fenêtre demandée. */
 export async function fetchCompetitionWindow(
   competitionCode: string,
   token: string,
@@ -62,4 +68,16 @@ export function splitUpcomingAndFinished(matches: FDMatch[]): { upcoming: FDMatc
     upcoming: matches.filter((m) => m.status === "SCHEDULED" || m.status === "TIMED"),
     finished: matches.filter((m) => m.status === "FINISHED"),
   };
+}
+
+export async function fetchStandings(competitionCode: string, token: string): Promise<FDStanding[]> {
+  const json = await footballDataGet(`/competitions/${competitionCode}/standings`, token);
+  await sleep(THROTTLE_MS);
+  const totalTable = (json.standings ?? []).find((s: any) => s.type === "TOTAL");
+  return (totalTable?.table ?? []).map((row: any) => ({
+    position: row.position,
+    team: { id: row.team.id, name: row.team.name },
+    points: row.points,
+    playedGames: row.playedGames,
+  }));
 }
