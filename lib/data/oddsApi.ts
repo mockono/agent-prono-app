@@ -6,12 +6,13 @@
  * correspond pas, dis-moi le JSON brut et je corrige.
  *
  * Free tier : 500 requêtes/mois. Coût = nb marchés × nb régions par appel.
- * Ici : 2 marchés (h2h, totals) × 1 région (uk) = 2 crédits par championnat
- * par rafraîchissement. Avec 6 championnats et un cache 24h : 12 crédits/jour
- * max ≈ 360/mois — large marge sous la limite.
+ * Ici : 3 marchés (h2h, totals, btts) × 1 région (uk) = 3 crédits par
+ * championnat par rafraîchissement. Avec 4 championnats et un cache 24h :
+ * 12 crédits/jour max ≈ 360/mois — large marge sous la limite.
  *
- * Pas de marché BTTS géré ici (pas confirmé disponible sur le plan gratuit) —
- * seules les cotes 1X2 et Over/Under 1.5/2.5 sont récupérées.
+ * BTTS ajouté mais jamais vérifié contre une vraie réponse — si le marché
+ * n'apparaît pas pour un championnat/plan donné, bttsYes/bttsNo restent
+ * simplement undefined, géré sans casser le reste.
  */
 
 const BASE_URL = "https://api.the-odds-api.com/v4";
@@ -29,7 +30,7 @@ export interface OddsEvent {
 }
 
 export async function fetchSportOdds(sportKey: string, apiKey: string): Promise<OddsEvent[]> {
-  const url = `${BASE_URL}/sports/${sportKey}/odds?apiKey=${apiKey}&regions=uk&markets=h2h,totals&oddsFormat=decimal`;
+  const url = `${BASE_URL}/sports/${sportKey}/odds?apiKey=${apiKey}&regions=uk&markets=h2h,totals,btts&oddsFormat=decimal`;
   const res = await fetch(url, { next: { revalidate: CACHE_SECONDS } });
   if (!res.ok) {
     throw new Error(`The Odds API ${sportKey} -> HTTP ${res.status}`);
@@ -45,6 +46,8 @@ export interface ParsedOdds {
   under15?: number;
   over25?: number;
   under25?: number;
+  bttsYes?: number;
+  bttsNo?: number;
 }
 
 export function parseOddsEvent(event: OddsEvent): ParsedOdds {
@@ -70,6 +73,12 @@ export function parseOddsEvent(event: OddsEvent): ParsedOdds {
           if (o.name === "Over") snapshot.over25 = o.price;
           if (o.name === "Under") snapshot.under25 = o.price;
         }
+      }
+    }
+    if (market.key === "btts") {
+      for (const o of market.outcomes) {
+        if (o.name === "Yes") snapshot.bttsYes = o.price;
+        if (o.name === "No") snapshot.bttsNo = o.price;
       }
     }
   }
