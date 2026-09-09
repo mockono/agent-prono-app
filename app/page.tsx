@@ -22,12 +22,12 @@ export default async function HomePage() {
       <MatchTicker analyses={sorted} />
 
       <div className="max-w-5xl mx-auto px-4">
-        <header className="pt-10 pb-8 border-b border-pitch-line">
-          <p className="font-mono tab-nums text-xs text-turf">MODÈLE REACTIVED V1</p>
-          <h1 className="font-display text-3xl md:text-4xl mt-1">AGENT PRONO</h1>
+        <header className="pt-10 pb-8 border-b border-pitch-line animate-fade-in-up">
+          <p className="font-mono tab-nums text-xs text-turf tracking-[0.15em]">MODÈLE REACTIVED V1</p>
+          <h1 className="font-display text-4xl md:text-5xl mt-1 tracking-tight">AGENT PRONO</h1>
           <p className="text-white/60 font-body text-sm max-w-md mt-2 leading-relaxed">
-            Score de confiance sur 100, calculé à partir de 7 facteurs pondérés, et sélection
-            automatique du marché offrant le meilleur rapport probabilité / cote / risque.
+            Score de confiance calculé à partir de 7 facteurs pondérés, et sélection automatique
+            du marché offrant le meilleur rapport probabilité / cote / risque.
           </p>
           <p
             className="font-mono tab-nums text-[11px] mt-3 inline-block border px-2 py-1"
