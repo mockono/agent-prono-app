@@ -1,4 +1,5 @@
 import type { MatchAnalysis } from "./matchAnalysis";
+import { riskTierOf } from "./riskTier";
 
 export type Forfait = "BASIC" | "FUN" | "PRO" | "MONTANTE";
 export type ProSubtier = "PRO_18_50" | "PRO_50_150" | "PRO_150_500" | "PRO_500_1500";
@@ -39,67 +40,81 @@ export interface TicketResult {
   message?: string;
 }
 
-/**
- * §11-15 du prompt maître : construit un ticket dont la cote totale tombe
- * dans la fourchette de la formule choisie, en priorisant les meilleurs
- * scores de confiance. Ne JAMAIS ajouter un match uniquement pour
- * atteindre une cote — si la fourchette n'est pas atteignable avec le
- * pool de matchs disponibles (score de confiance suffisant + marché avec
- * edge positive), on retourne le meilleur ticket possible sous le
- * plafond, avec un statut "insufficient_data" explicite plutôt que de
- * forcer une sélection artificielle.
- */
+interface FillState {
+  selections: TicketSelection[];
+  totalOdds: number;
+}
+
+function toSelection(analysis: MatchAnalysis): TicketSelection | null {
+  const market = analysis.bestMarket;
+  if (!market || !market.odds) return null;
+  return { analysis, market: market.market, selectionDetail: market.selectionDetail, odds: market.odds };
+}
+
+function greedyFill(pool: MatchAnalysis[], range: ForfaitRange): FillState {
+  const selections: TicketSelection[] = [];
+  let totalOdds = 1;
+  for (const analysis of pool) {
+    const sel = toSelection(analysis);
+    if (!sel) continue;
+    const projected = totalOdds * sel.odds;
+    if (projected > range.max && selections.length > 0) continue;
+    selections.push(sel);
+    totalOdds = projected;
+    if (totalOdds >= range.min && totalOdds <= range.max) break;
+  }
+  return { selections, totalOdds };
+}
+
+function topUp(state: FillState, extraPool: MatchAnalysis[], range: ForfaitRange, maxExtra: number): FillState {
+  const usedIds = new Set(state.selections.map((s) => s.analysis.match.id));
+  let added = 0;
+  let { selections, totalOdds } = state;
+  for (const analysis of extraPool) {
+    if (added >= maxExtra || totalOdds >= range.min) break;
+    if (usedIds.has(analysis.match.id)) continue;
+    const sel = toSelection(analysis);
+    if (!sel) continue;
+    const projected = totalOdds * sel.odds;
+    if (projected > range.max && selections.length > 0) continue;
+    selections = [...selections, sel];
+    totalOdds = projected;
+    added++;
+  }
+  return { selections, totalOdds };
+}
+
 export function buildTicket(
   analyses: MatchAnalysis[],
   forfait: Forfait,
-  options: { proSubtier?: ProSubtier; montanteStep?: number; minConfidence?: number } = {}
+  options: { proSubtier?: ProSubtier; montanteStep?: number } = {}
 ): TicketResult {
   const range: ForfaitRange =
     forfait === "PRO" && options.proSubtier
       ? PRO_SUBTIER_RANGES[options.proSubtier]
       : forfait === "MONTANTE"
-      ? { min: 1, max: Infinity } // la montante n'a pas de contrainte de cote, mais de nombre de matchs
+      ? { min: 1, max: Infinity }
       : FORFAIT_RANGES[forfait as Exclude<Forfait, "MONTANTE">];
 
-  const minConfidence = options.minConfidence ?? (forfait === "BASIC" ? 65 : forfait === "FUN" ? 55 : 0);
-
-  // Ne retenir que les matchs où le moteur a trouvé un marché avec une edge positive,
-  // triés par score de confiance décroissant (§14 : "éliminer les matchs à faible confiance").
   const eligible = analyses
-    .filter((a) => a.bestMarket && a.confidence.totalScore >= minConfidence)
+    .filter((a) => a.bestMarket)
     .sort((a, b) => b.confidence.totalScore - a.confidence.totalScore);
 
-  const targetCount = forfait === "MONTANTE" ? options.montanteStep ?? 10 : undefined;
+  const safe = eligible.filter((a) => riskTierOf(a.confidence.totalScore) === "SAFE");
+  const mid = eligible.filter((a) => riskTierOf(a.confidence.totalScore) === "MID");
+  const crazy = eligible.filter((a) => riskTierOf(a.confidence.totalScore) === "CRAZY");
 
-  const selections: TicketSelection[] = [];
-  let totalOdds = 1;
-
-  for (const analysis of eligible) {
-    if (targetCount !== undefined && selections.length >= targetCount) break;
-    const market = analysis.bestMarket!;
-    if (!market.odds) continue;
-
-    const projected = totalOdds * market.odds;
-    // Pour Basic/Fun/Pro : ne pas dépasser le plafond de la fourchette.
-    if (targetCount === undefined && projected > range.max && selections.length > 0) continue;
-
-    selections.push({
-      analysis,
-      market: market.market,
-      selectionDetail: market.selectionDetail,
-      odds: market.odds,
-    });
-    totalOdds = projected;
-
-    if (targetCount === undefined && totalOdds >= range.min && totalOdds <= range.max) {
-      // Fourchette atteinte : on peut s'arrêter dès que le minimum est franchi
-      // (on continue seulement si un match supplémentaire de haute confiance reste pertinent).
-      break;
+  if (forfait === "MONTANTE") {
+    const targetCount = options.montanteStep ?? 10;
+    const selections: TicketSelection[] = [];
+    let totalOdds = 1;
+    for (const analysis of eligible) {
+      if (selections.length >= targetCount) break;
+      const sel = toSelection(analysis);
+      if (!sel) continue;
+      selections.push(sel);
+      totalOdds *= sel.odds;
     }
-  }
-
-  if (targetCount !== undefined) {
-    // MONTANTE : on visait un nombre de matchs précis
     if (selections.length < targetCount) {
       return {
         forfait,
@@ -108,23 +123,46 @@ export function buildTicket(
         totalOdds,
         targetRange: range,
         status: "insufficient_data",
-        message: `Seulement ${selections.length}/${targetCount} matchs éligibles disponibles dans le pool actuel (données de démo limitées). Le moteur refuse d'en ajouter artificiellement.`,
+        message: `Seulement ${selections.length}/${targetCount} matchs éligibles disponibles dans le pool actuel. Le moteur refuse d'en ajouter artificiellement.`,
       };
     }
     return { forfait, montanteStep: targetCount, selections, totalOdds, targetRange: range, status: "ok" };
   }
 
-  if (totalOdds < range.min) {
+  let state: FillState;
+  let insufficientMessage: string;
+
+  if (forfait === "BASIC") {
+    state = greedyFill(safe, range);
+    if (state.totalOdds < range.min) state = topUp(state, mid, range, 2);
+    insufficientMessage = `Cote atteinte (${state.totalOdds.toFixed(2)}) inférieure à la fourchette Basic (${range.min}–${range.max}) même après complément avec des picks Fun. Le pool actuel est trop restreint.`;
+  } else if (forfait === "FUN") {
+    state = greedyFill([...safe, ...mid].sort((a, b) => b.confidence.totalScore - a.confidence.totalScore), range);
+    if (state.totalOdds < range.min) state = topUp(state, crazy, range, 2);
+    insufficientMessage = `Cote atteinte (${state.totalOdds.toFixed(2)}) inférieure à la fourchette Fun (${range.min}–${range.max}) même après complément avec 1-2 picks Crazy. Le pool actuel est trop restreint.`;
+  } else {
+    state = greedyFill(safe, range);
+    insufficientMessage = `Cote atteinte (${state.totalOdds.toFixed(2)}) inférieure à la fourchette ${forfait} (${range.min}–${range.max}). Le forfait Pro reste Safe uniquement par principe — le moteur refuse de descendre en risque pour compenser un pool trop restreint.`;
+  }
+
+  if (state.totalOdds < range.min) {
     return {
       forfait,
       proSubtier: options.proSubtier,
-      selections,
-      totalOdds,
+      selections: state.selections,
+      totalOdds: state.totalOdds,
       targetRange: range,
       status: "insufficient_data",
-      message: `Cote totale atteinte (${totalOdds.toFixed(2)}) inférieure à la fourchette ${forfait} (${range.min}–${range.max}). Le pool de matchs actuel (démo) est trop restreint — le moteur refuse d'ajouter un match artificiellement.`,
+      message: insufficientMessage,
     };
   }
 
-  return { forfait, proSubtier: options.proSubtier, selections, totalOdds, targetRange: range, status: "ok" };
+  return {
+    forfait,
+    proSubtier: options.proSubtier,
+    selections: state.selections,
+    totalOdds: state.totalOdds,
+    targetRange: range,
+    status: "ok",
+  };
 }
